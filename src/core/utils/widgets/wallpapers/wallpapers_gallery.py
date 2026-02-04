@@ -1,5 +1,6 @@
 import os
 import re
+import urllib.request
 from functools import partial
 
 from PyQt6.QtCore import (
@@ -17,13 +18,14 @@ from PyQt6.QtCore import (
     pyqtProperty,
     pyqtSignal,
 )
-from PyQt6.QtGui import QCursor, QImageReader, QPainter, QPainterPath, QPixmap, QWheelEvent
+from PyQt6.QtGui import QBrush, QColor, QCursor, QFont, QImageReader, QPainter, QPainterPath, QPen, QPixmap, QWheelEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
     QGraphicsOpacityEffect,
     QGridLayout,
     QHBoxLayout,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QScrollArea,
@@ -39,6 +41,20 @@ from core.event_service import EventService
 from core.utils.utilities import is_windows_10, refresh_widget_style
 from core.utils.win32.win32_accent import Blur
 from core.utils.win32.window_actions import force_foreground_focus
+
+
+def _resolution_label(w, h):
+    """Return a resolution badge string based on pixel dimensions."""
+    pixels = max(w, h)
+    if pixels >= 3840:
+        return "4K"
+    elif pixels >= 2560:
+        return "2K"
+    elif pixels >= 1920:
+        return "HD"
+    elif pixels >= 1280:
+        return "720p"
+    return ""
 
 
 class BaseStyledWidget(QWidget):
@@ -89,12 +105,20 @@ class HoverLabel(QFrame, BaseStyledWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._opacity = 0.0
         self._pixmap = None
+        self._orig_w = 0
+        self._orig_h = 0
         self.parent_gallery = parent
         self.setProperty("class", "wallpapers-gallery-image")
         self.apply_stylesheet()
         self.opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.opacity_effect)
         self.opacity_effect.setOpacity(self._opacity)
+
+    def setOriginalSize(self, w, h):
+        """Store the original image dimensions for badge rendering."""
+        self._orig_w = w
+        self._orig_h = h
+        self.update()
 
     def setPixmap(self, pixmap):
         self._pixmap = pixmap
@@ -120,6 +144,74 @@ class HoverLabel(QFrame, BaseStyledWidget):
             painter.setClipPath(path)
 
             painter.drawPixmap(self.contentsRect(), self._pixmap)
+
+            # Draw badges if we have original dimensions
+            if self._orig_w > 0 and self._orig_h > 0:
+                self._draw_badges(painter, rect)
+
+    def _draw_badges(self, painter, rect):
+        """Draw resolution and orientation badges on the thumbnail."""
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        badge_font = QFont("Segoe UI", 7, QFont.Weight.Bold)
+        painter.setFont(badge_font)
+
+        badge_h = 16
+        badge_y = rect.bottom() - badge_h - 4
+        badge_x = rect.left() + 4
+
+        # Resolution badge (bottom-left)
+        res_text = _resolution_label(self._orig_w, self._orig_h)
+        if res_text:
+            # Badge colors by resolution
+            if res_text == "4K":
+                bg_color = QColor(220, 50, 50, 200)  # Red
+            elif res_text == "2K":
+                bg_color = QColor(50, 140, 220, 200)  # Blue
+            elif res_text == "HD":
+                bg_color = QColor(50, 180, 100, 200)  # Green
+            else:
+                bg_color = QColor(140, 140, 140, 200)  # Gray
+
+            fm = painter.fontMetrics()
+            text_w = fm.horizontalAdvance(res_text) + 8
+            badge_rect = QRectF(badge_x, badge_y, text_w, badge_h)
+
+            badge_path = QPainterPath()
+            badge_path.addRoundedRect(badge_rect, 4, 4)
+            painter.fillPath(badge_path, QBrush(bg_color))
+            painter.setPen(QPen(QColor(255, 255, 255, 240)))
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, res_text)
+
+            badge_x += text_w + 3
+
+        # Orientation badge (next to resolution)
+        is_landscape = self._orig_w >= self._orig_h
+        orient_text = "L" if is_landscape else "P"
+        orient_color = QColor(100, 80, 200, 180) if is_landscape else QColor(200, 120, 50, 180)
+
+        fm = painter.fontMetrics()
+        orient_w = fm.horizontalAdvance(orient_text) + 8
+        orient_rect = QRectF(badge_x, badge_y, orient_w, badge_h)
+
+        orient_path = QPainterPath()
+        orient_path.addRoundedRect(orient_rect, 4, 4)
+        painter.fillPath(orient_path, QBrush(orient_color))
+        painter.setPen(QPen(QColor(255, 255, 255, 240)))
+        painter.drawText(orient_rect, Qt.AlignmentFlag.AlignCenter, orient_text)
+
+        # Dimensions text (bottom-right, smaller)
+        dim_font = QFont("Segoe UI", 6)
+        painter.setFont(dim_font)
+        dim_text = f"{self._orig_w}x{self._orig_h}"
+        fm = painter.fontMetrics()
+        dim_w = fm.horizontalAdvance(dim_text) + 6
+        dim_rect = QRectF(rect.right() - dim_w - 4, badge_y, dim_w, badge_h)
+
+        dim_path = QPainterPath()
+        dim_path.addRoundedRect(dim_rect, 4, 4)
+        painter.fillPath(dim_path, QBrush(QColor(0, 0, 0, 140)))
+        painter.setPen(QPen(QColor(200, 200, 200, 220)))
+        painter.drawText(dim_rect, Qt.AlignmentFlag.AlignCenter, dim_text)
 
     @pyqtProperty(float)
     def opacity(self):
@@ -155,7 +247,7 @@ class HoverLabel(QFrame, BaseStyledWidget):
 
 
 class ImageSignals(QObject):
-    loaded = pyqtSignal(str, QPixmap, int)
+    loaded = pyqtSignal(str, QPixmap, int, int, int)  # path, pixmap, index, orig_w, orig_h
 
 
 class ImageLoader(QRunnable):
@@ -176,6 +268,9 @@ class ImageLoader(QRunnable):
         # Get original image dimensions first
         reader = QImageReader(self.image_path)
         original_size = reader.size()
+
+        orig_w = original_size.width() if original_size.isValid() else 0
+        orig_h = original_size.height() if original_size.isValid() else 0
 
         if not original_size.isValid():
             # Fallback if we can't determine original size
@@ -227,11 +322,13 @@ class ImageLoader(QRunnable):
 
         pixmap.setDevicePixelRatio(self.dpr)
 
-        self.signals.loaded.emit(self.image_path, pixmap, self.index)
+        self.signals.loaded.emit(self.image_path, pixmap, self.index, orig_w, orig_h)
 
 
 class ImageGallery(QMainWindow, BaseStyledWidget):
     """ImageGallery displays a gallery of images with navigation and lazy loading features."""
+
+    URL_IMPORT_HEIGHT = 36  # Height of the URL import bar
 
     def __init__(self, image_paths, gallery):
         super().__init__()
@@ -248,7 +345,7 @@ class ImageGallery(QMainWindow, BaseStyledWidget):
             if os.path.exists(path):
                 for root, dirs, files in os.walk(path):
                     for f in files:
-                        if f.lower().endswith(("png", "jpg", "jpeg", "gif", "bmp")):
+                        if f.lower().endswith(("png", "jpg", "jpeg", "gif", "bmp", "webp")):
                             all_files.append(os.path.join(root, f))
 
         self.image_files = sorted(all_files)  # or any ordering you prefer
@@ -318,6 +415,9 @@ class ImageGallery(QMainWindow, BaseStyledWidget):
         self.active_token = 0
         self.expected_images = 0
         self.loaded_images = 0
+
+        # Store original dimensions per label index for badge rendering
+        self._orig_dimensions = {}
 
     def initUI(self, parent=None):
         """Initialize the UI components and layout for the wallpapers gallery window."""
@@ -415,8 +515,118 @@ class ImageGallery(QMainWindow, BaseStyledWidget):
             self.prev_button.adjustSize()
             self.button_row_height = max(self.prev_button.sizeHint().height(), self.next_button.sizeHint().height())
 
+        # URL import bar at the bottom
+        self._setup_url_import_bar(layout)
+
         # Apply window bounds and center on screen
         self._apply_window_bounds(screen)
+
+    def _setup_url_import_bar(self, parent_layout):
+        """Add a URL import bar at the bottom of the gallery."""
+        url_container = QFrame()
+        url_container.setStyleSheet("background-color: transparent; border: 0;")
+        url_layout = QHBoxLayout()
+        url_layout.setContentsMargins(8, 4, 8, 6)
+        url_layout.setSpacing(4)
+        url_container.setLayout(url_layout)
+
+        self._url_input = QLineEdit()
+        self._url_input.setPlaceholderText("Paste image URL to import...")
+        self._url_input.setStyleSheet(
+            "QLineEdit {"
+            "  background: rgba(255,255,255,0.08);"
+            "  border: 1px solid rgba(255,255,255,0.15);"
+            "  border-radius: 6px;"
+            "  color: #ddd;"
+            "  padding: 4px 8px;"
+            "  font-size: 11px;"
+            "  font-family: 'Segoe UI';"
+            "}"
+            "QLineEdit:focus {"
+            "  border: 1px solid rgba(230,57,70,0.6);"
+            "  background: rgba(255,255,255,0.12);"
+            "}"
+        )
+        self._url_input.setFixedHeight(26)
+        self._url_input.returnPressed.connect(self._import_from_url)
+        url_layout.addWidget(self._url_input)
+
+        import_btn = QPushButton("Import")
+        import_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: rgba(230,57,70,0.7);"
+            "  border: none;"
+            "  border-radius: 6px;"
+            "  color: white;"
+            "  padding: 4px 12px;"
+            "  font-size: 11px;"
+            "  font-weight: bold;"
+            "  font-family: 'Segoe UI';"
+            "}"
+            "QPushButton:hover {"
+            "  background: rgba(230,57,70,0.9);"
+            "}"
+        )
+        import_btn.setFixedHeight(26)
+        import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        import_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        import_btn.clicked.connect(self._import_from_url)
+        url_layout.addWidget(import_btn)
+
+        parent_layout.addWidget(url_container)
+        self.button_row_height += self.URL_IMPORT_HEIGHT
+
+    def _import_from_url(self):
+        """Download an image from a URL and save it to the wallpapers folder."""
+        url = self._url_input.text().strip()
+        if not url:
+            return
+
+        # Determine target folder (first writable image_path)
+        target_dir = None
+        for p in self.image_paths:
+            if os.path.isdir(p):
+                target_dir = p
+                break
+        if not target_dir:
+            self._url_input.setText("Error: No valid wallpaper folder")
+            return
+
+        # Extract filename from URL
+        url_path = url.split("?")[0].split("#")[0]
+        filename = os.path.basename(url_path)
+        if not filename or "." not in filename:
+            filename = "imported_wallpaper.jpg"
+
+        # Ensure valid image extension
+        valid_exts = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")
+        if not filename.lower().endswith(valid_exts):
+            filename += ".jpg"
+
+        # Avoid overwriting
+        target_path = os.path.join(target_dir, filename)
+        base, ext = os.path.splitext(filename)
+        counter = 1
+        while os.path.exists(target_path):
+            target_path = os.path.join(target_dir, f"{base}_{counter}{ext}")
+            counter += 1
+
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read()
+
+            with open(target_path, "wb") as f:
+                f.write(data)
+
+            # Add to image_files and refresh
+            self.image_files.append(target_path)
+            self.image_files.sort()
+            self._url_input.clear()
+            self._url_input.setPlaceholderText(f"Imported: {os.path.basename(target_path)}")
+            self.load_images()
+        except Exception as e:
+            self._url_input.setText(f"Error: {e}")
 
     def _apply_window_bounds(self, screen):
         """Size and center the gallery window within the active screen."""
@@ -523,6 +733,7 @@ class ImageGallery(QMainWindow, BaseStyledWidget):
         remaining_images = max(0, len(self.image_files) - self.current_index)
         self.expected_images = min(self.images_per_page, remaining_images)
         self.loaded_images = 0
+        self._orig_dimensions = {}
 
         # Clear existing widgets and their pixmaps to free memory
         while self.image_layout.count():
@@ -568,21 +779,23 @@ class ImageGallery(QMainWindow, BaseStyledWidget):
             self.focused_index = self.current_index
         self.update_focus()
 
-    def _handle_image_loaded(self, token, image_path, pixmap, index):
+    def _handle_image_loaded(self, token, image_path, pixmap, index, orig_w, orig_h):
         """Process image load callbacks, ignoring stale requests."""
         if token != self.active_token:
             return
 
-        self.update_image_label(image_path, pixmap, index)
+        self._orig_dimensions[index] = (orig_w, orig_h)
+        self.update_image_label(image_path, pixmap, index, orig_w, orig_h)
         self.loaded_images += 1
         if self.loaded_images >= self.expected_images:
             self.is_loading = False
 
-    def update_image_label(self, image_path, pixmap, index):
+    def update_image_label(self, image_path, pixmap, index, orig_w=0, orig_h=0):
         """Update label with loaded image."""
         if index < self.image_layout.count():
             label = self.image_layout.itemAt(index).widget()
             label.setPixmap(pixmap)
+            label.setOriginalSize(orig_w, orig_h)
             if self.lazy_load:
                 label.fade_in(self.lazy_load_fadein)
             else:
@@ -701,6 +914,13 @@ class ImageGallery(QMainWindow, BaseStyledWidget):
 
     def keyPressEvent(self, event):
         """Handle key press events for gallery navigation."""
+        # Let URL input handle its own key events
+        if hasattr(self, "_url_input") and self._url_input.hasFocus():
+            if event.key() == Qt.Key.Key_Escape:
+                self._url_input.clearFocus()
+                self.setFocus()
+            return
+
         if self.is_loading:
             return
 

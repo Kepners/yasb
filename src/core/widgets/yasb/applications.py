@@ -2,8 +2,8 @@ import logging
 import os
 import subprocess
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QCursor, QPixmap
+from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty
+from PyQt6.QtGui import QCursor, QPixmap, QPainter, QTransform
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
 
 from core.utils.tooltip import set_tooltip
@@ -95,17 +95,94 @@ class ApplicationsWidget(BaseWidget):
 
 
 class ClickableLabel(QLabel):
+    """QLabel with rotation animation support for wiggle effect."""
+
     def __init__(self, parent: ApplicationsWidget | None = None):
         super().__init__(parent)
         self.parent_widget = parent
         self.data = None
+        self.container = None
+        self._rotation = 0.0  # Rotation angle in degrees
+        self._wiggle_anim = None
+        self._text_content = ""  # Cache text for custom painting
+
+    def getRotation(self):
+        return self._rotation
+
+    def setRotation(self, angle):
+        self._rotation = angle
+        self.update()  # Trigger repaint
+
+    # Define rotation as a Qt property for animation
+    rotation = pyqtProperty(float, getRotation, setRotation)
+
+    def setText(self, text):
+        """Override to cache text content."""
+        self._text_content = text
+        super().setText(text)
+
+    def paintEvent(self, event):
+        """Custom paint with rotation transform around center."""
+        if abs(self._rotation) < 0.1:
+            # No significant rotation - use default painting
+            super().paintEvent(event)
+            return
+
+        # Don't call super() - we handle all painting
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+        # Save painter state
+        painter.save()
+
+        # Rotate around widget center
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        painter.translate(cx, cy)
+        painter.rotate(self._rotation)
+        painter.translate(-cx, -cy)
+
+        # Draw text (font icon) centered
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        painter.setFont(self.font())
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._text_content or self.text())
+
+        painter.restore()
+        painter.end()
+
+    def _startWiggle(self):
+        """Start rotational wiggle animation matching LayoutForge HotCorner."""
+        # Stop any existing animation
+        if self._wiggle_anim:
+            self._wiggle_anim.stop()
+
+        self._wiggle_anim = QPropertyAnimation(self, b"rotation")
+        self._wiggle_anim.setDuration(400)  # 400ms like LayoutForge
+
+        # Keyframes: 0 -> -8 -> 6 -> -4 -> 2 -> 0 (matching HotCorner shake)
+        self._wiggle_anim.setKeyValueAt(0.0, 0.0)
+        self._wiggle_anim.setKeyValueAt(0.15, -8.0)
+        self._wiggle_anim.setKeyValueAt(0.35, 6.0)
+        self._wiggle_anim.setKeyValueAt(0.55, -4.0)
+        self._wiggle_anim.setKeyValueAt(0.75, 2.0)
+        self._wiggle_anim.setKeyValueAt(1.0, 0.0)
+
+        self._wiggle_anim.start()
+
+    def enterEvent(self, event):
+        """Trigger rotational wiggle animation on hover."""
+        super().enterEvent(event)
+        self._startWiggle()
+
+    def leaveEvent(self, event):
+        """Stop wiggle and reset rotation on mouse leave."""
+        super().leaveEvent(event)
+        if self._wiggle_anim:
+            self._wiggle_anim.stop()
+        self._rotation = 0.0
+        self.update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.data and self.parent_widget:
-            if self.parent_widget.config.animation.enabled:
-                AnimationManager.animate(
-                    self.container,
-                    self.parent_widget.config.animation.type,
-                    self.parent_widget.config.animation.duration,
-                )
             self.parent_widget.execute_code(self.data)

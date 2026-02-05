@@ -1,13 +1,15 @@
 import logging
 
-from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QTimer
-from PyQt6.QtWidgets import QGraphicsOpacityEffect, QWidget
+from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup, QTimer
+from PyQt6.QtGui import QTransform
+from PyQt6.QtWidgets import QGraphicsOpacityEffect, QGraphicsRotation, QWidget
 
 
 class AnimationManager:
     _instances = {}
     _repeating_animations = {}  # Track widgets with repeating animations
-    ALLOWED_ANIMATIONS = ["fadeInOut"]
+    _wiggle_animations = {}  # Track active wiggle animations
+    ALLOWED_ANIMATIONS = ["fadeInOut", "wiggle"]
 
     @classmethod
     def animate(cls, widget: QWidget, animation_type: str, duration: int = 200):
@@ -138,3 +140,59 @@ class AnimationManager:
         # Keep reference to prevent garbage collection if not cleared
         widget._yasb_animation = anim
         anim.start()
+
+    def wiggle(self, widget):
+        """Wiggle animation - shake widget using margin changes.
+        Works with Qt layouts by temporarily changing margins via stylesheet.
+        """
+        widget_id = id(widget)
+
+        # Stop any existing wiggle animation for this widget
+        if widget_id in AnimationManager._wiggle_animations:
+            try:
+                old_timer = AnimationManager._wiggle_animations[widget_id]
+                old_timer.stop()
+                old_timer.deleteLater()
+            except Exception:
+                pass
+
+        # Store original stylesheet
+        if not hasattr(widget, '_wiggle_original_style'):
+            widget._wiggle_original_style = widget.styleSheet()
+
+        original_style = widget._wiggle_original_style
+
+        # Keyframes: margin-left offset in pixels (creates shake effect)
+        # Total duration ~400ms, 8 steps = 50ms per step
+        keyframes = [0, -3, 3, -2, 2, -1, 1, 0]
+        current_frame = [0]
+
+        def animate_frame():
+            if current_frame[0] >= len(keyframes):
+                # Animation complete - restore original style
+                try:
+                    widget.setStyleSheet(original_style)
+                except Exception:
+                    pass
+                AnimationManager._wiggle_animations.pop(widget_id, None)
+                timer.stop()
+                timer.deleteLater()
+                return
+
+            offset = keyframes[current_frame[0]]
+            try:
+                # Apply margin offset via stylesheet
+                margin_style = f"margin-left: {offset}px; margin-right: {-offset}px;"
+                widget.setStyleSheet(original_style + margin_style)
+            except Exception:
+                pass
+            current_frame[0] += 1
+
+        timer = QTimer()
+        timer.setInterval(50)  # 50ms per frame = 400ms total
+        timer.timeout.connect(animate_frame)
+        AnimationManager._wiggle_animations[widget_id] = timer
+
+        # Start first frame immediately
+        animate_frame()
+        timer.start()

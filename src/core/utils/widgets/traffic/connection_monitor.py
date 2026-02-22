@@ -98,6 +98,14 @@ class InternetChecker(QObject):
             self.timer = None
 
         if self.worker:
+            # Disconnect signals BEFORE stopping the thread.  Without this a
+            # still-running worker can emit result_ready after InternetChecker
+            # is destroyed, invoking a dead slot and crashing in Qt6Core.
+            try:
+                self.worker.result_ready.disconnect(self._on_connection_result)
+                self.worker.finished.disconnect(self._on_worker_finished)
+            except Exception:
+                pass
             self.worker.stop()
             self.worker = None
 

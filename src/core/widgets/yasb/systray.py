@@ -104,6 +104,7 @@ class SystrayWidget(BaseWidget):
         self.icons: list[IconWidget] = []
         self.current_state: dict[str, IconState] = {}
         self.screen_id: str | None = None
+        self._systray_client = None  # stored so we can disconnect on destruction
 
         # This timer will check if icons are still valid and have actual process attached
         self.icon_check_timer = QTimer(self)
@@ -207,8 +208,13 @@ class SystrayWidget(BaseWidget):
         """Setup the tray monitor client and connect signals"""
         self.load_state()
         systray_client, systray_thread = SystrayWidget.get_client_instance()
+        self._systray_client = systray_client
         systray_client.icon_modified.connect(self.on_icon_modified)
         systray_client.icon_deleted.connect(self.on_icon_deleted)
+        # Disconnect from the shared singleton when this widget is destroyed.
+        # Without this, the singleton keeps live signal connections to dead
+        # QObjects — the next emission hits a freed vtable and crashes Qt6Core.
+        self.destroyed.connect(self._disconnect_client_signals)
 
         app_inst = QApplication.instance()
         if app_inst is not None:
@@ -218,6 +224,20 @@ class SystrayWidget(BaseWidget):
         if systray_thread is not None and not systray_thread.isRunning():
             systray_thread.start()
             systray_thread.started.connect(self.on_thread_started)
+
+    def _disconnect_client_signals(self):
+        """Disconnect from the shared SystrayMonitor singleton on widget destruction.
+
+        The SystrayMonitor singleton outlives individual SystrayWidget instances.
+        If we don't disconnect, the singleton fires icon_modified/icon_deleted at
+        dead QObjects, corrupts the vtable, and crashes in Qt6Core.dll (DEP violation).
+        """
+        try:
+            if self._systray_client is not None:
+                self._systray_client.icon_modified.disconnect(self.on_icon_modified)
+                self._systray_client.icon_deleted.disconnect(self.on_icon_deleted)
+        except Exception:
+            pass
 
     @classmethod
     def _cleanup_threads(cls):

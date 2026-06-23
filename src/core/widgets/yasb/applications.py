@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+import time
 
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty
 from PyQt6.QtGui import QCursor, QPixmap, QPainter, QTransform
@@ -66,6 +67,9 @@ class ApplicationsWidget(BaseWidget):
                 else:
                     label.setText(icon)
 
+                # Center icon/text in label (fixes vertical alignment for icon font glyphs)
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
                 label.data = app_data.launch
                 label.container = label_container  # Store reference to container
 
@@ -95,55 +99,79 @@ class ApplicationsWidget(BaseWidget):
 
 
 class ClickableLabel(QLabel):
-    """QLabel with rotation animation support for wiggle effect."""
+    """QLabel with rotation + blue background animation for wiggle effect."""
 
     def __init__(self, parent: ApplicationsWidget | None = None):
         super().__init__(parent)
         self.parent_widget = parent
         self.data = None
         self.container = None
-        self._rotation = 0.0  # Rotation angle in degrees
+        self._rotation = 0.0
         self._wiggle_anim = None
-        self._text_content = ""  # Cache text for custom painting
+        self._bg_anim = None
+        self._bg_progress = 0.0
+        self._text_content = ""
+        self._last_click_time = 0.0  # Click cooldown
 
+    # --- Rotation property (wiggle) ---
     def getRotation(self):
         return self._rotation
 
     def setRotation(self, angle):
         self._rotation = angle
-        self.update()  # Trigger repaint
+        self.update()
 
-    # Define rotation as a Qt property for animation
     rotation = pyqtProperty(float, getRotation, setRotation)
+
+    # --- Background progress property (blue transition) ---
+    def getBgProgress(self):
+        return self._bg_progress
+
+    def setBgProgress(self, val):
+        self._bg_progress = val
+        container = getattr(self.parent_widget, '_widget_container', None)
+        if not container:
+            return
+        # Interpolate: rgba(30,34,40,0.7) -> #3B82F6 (rgb 59,130,246)
+        r = int(30 + (59 - 30) * val)
+        g = int(34 + (130 - 34) * val)
+        b = int(40 + (246 - 40) * val)
+        a = 0.7 + 0.3 * val
+        color = f"rgba({r},{g},{b},{a:.2f})"
+        container.setStyleSheet(
+            f"background-color: {color}; border: 1px solid {color}; "
+            f"border-radius: 12px; margin: 4px 0;"
+        )
+
+    bgProgress = pyqtProperty(float, getBgProgress, setBgProgress)
 
     def setText(self, text):
         """Override to cache text content."""
         self._text_content = text
         super().setText(text)
 
+    def _is_icon_font(self):
+        """Check if this label uses an icon font glyph (non-ASCII)."""
+        text = self._text_content or self.text()
+        return text and len(text) == 1 and ord(text[0]) > 255
+
     def paintEvent(self, event):
         """Custom paint with rotation transform around center."""
         if abs(self._rotation) < 0.1:
-            # No significant rotation - use default painting
             super().paintEvent(event)
             return
 
-        # Don't call super() - we handle all painting
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-
-        # Save painter state
         painter.save()
 
-        # Rotate around widget center
         cx = self.width() / 2.0
         cy = self.height() / 2.0
         painter.translate(cx, cy)
         painter.rotate(self._rotation)
         painter.translate(-cx, -cy)
 
-        # Draw text (font icon) centered
         painter.setPen(self.palette().color(self.foregroundRole()))
         painter.setFont(self.font())
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._text_content or self.text())
@@ -152,37 +180,54 @@ class ClickableLabel(QLabel):
         painter.end()
 
     def _startWiggle(self):
-        """Start rotational wiggle animation matching LayoutForge HotCorner."""
-        # Stop any existing animation
+        """Start rotational wiggle + blue bg transition (icon font only)."""
         if self._wiggle_anim:
             self._wiggle_anim.stop()
 
         self._wiggle_anim = QPropertyAnimation(self, b"rotation")
-        self._wiggle_anim.setDuration(400)  # 400ms like LayoutForge
-
-        # Keyframes: 0 -> -8 -> 6 -> -4 -> 2 -> 0 (matching HotCorner shake)
+        self._wiggle_anim.setDuration(400)
         self._wiggle_anim.setKeyValueAt(0.0, 0.0)
         self._wiggle_anim.setKeyValueAt(0.15, -8.0)
         self._wiggle_anim.setKeyValueAt(0.35, 6.0)
         self._wiggle_anim.setKeyValueAt(0.55, -4.0)
         self._wiggle_anim.setKeyValueAt(0.75, 2.0)
         self._wiggle_anim.setKeyValueAt(1.0, 0.0)
-
         self._wiggle_anim.start()
 
+        # Blue background transition for icon font glyphs (e.g. Windows logo)
+        if self._is_icon_font():
+            if self._bg_anim:
+                self._bg_anim.stop()
+            self._bg_anim = QPropertyAnimation(self, b"bgProgress")
+            self._bg_anim.setDuration(400)
+            self._bg_anim.setStartValue(0.0)
+            self._bg_anim.setEndValue(1.0)
+            self._bg_anim.start()
+
     def enterEvent(self, event):
-        """Trigger rotational wiggle animation on hover."""
+        """Trigger wiggle + blue transition on hover."""
         super().enterEvent(event)
         self._startWiggle()
 
     def leaveEvent(self, event):
-        """Stop wiggle and reset rotation on mouse leave."""
+        """Stop animations and reset on mouse leave."""
         super().leaveEvent(event)
         if self._wiggle_anim:
             self._wiggle_anim.stop()
+        if self._bg_anim:
+            self._bg_anim.stop()
         self._rotation = 0.0
+        self._bg_progress = 0.0
         self.update()
+        # Reset container background to CSS default
+        container = getattr(self.parent_widget, '_widget_container', None)
+        if container:
+            container.setStyleSheet("")
 
     def mousePressEvent(self, event):
+        """Handle click with 500ms cooldown to prevent accidental triggers."""
         if event.button() == Qt.MouseButton.LeftButton and self.data and self.parent_widget:
-            self.parent_widget.execute_code(self.data)
+            now = time.time()
+            if now - self._last_click_time >= 0.5:
+                self._last_click_time = now
+                self.parent_widget.execute_code(self.data)

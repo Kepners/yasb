@@ -22,8 +22,8 @@
     box-sizing: border-box;
 }
 
-/* --- Yasb Bar Itself --- */
-.yasb-bar {
+/* --- LF Status Bar Itself --- */
+.lf-bar {
     background-color: var(--background-color);
     border-radius: 0;
     border: none;
@@ -184,6 +184,12 @@
 
 .power-menu-widget .label {
     font-size: 13px;
+    qproperty-alignment: AlignCenter;
+}
+
+.power-menu-widget .widget-container:hover {
+    background-color: #3B82F6;
+    border-color: #3B82F6;
 }
 
 /* --- Power Menu Popup --- */

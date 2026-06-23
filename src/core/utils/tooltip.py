@@ -1,5 +1,6 @@
 import re
 
+from PyQt6 import sip
 from PyQt6.QtCore import (
     QEasingCurve,
     QEvent,
@@ -231,7 +232,8 @@ class CustomToolTip(QFrame):
     def show_tooltip(self, text, widget_geometry=None, duration=None):
         """Show tooltip centered below or above the widget."""
         if CustomToolTip._active_tooltip and CustomToolTip._active_tooltip is not self:
-            CustomToolTip._active_tooltip.hide()
+            # Use start_fade_out instead of direct .hide() so animations and cleanup run properly
+            CustomToolTip._active_tooltip.start_fade_out()
         CustomToolTip._active_tooltip = self
 
         self.label.setText(text)
@@ -246,8 +248,9 @@ class CustomToolTip(QFrame):
         self._start_animations(fade_in=True)
         self.show()
 
-        if duration:
-            self.hide_timer.start(duration)
+        # Safety timeout: always auto-hide after 3 seconds even if mouse tracking fails
+        # (prevents stuck tooltips when another process's window intercepts Leave events)
+        self.hide_timer.start(duration if duration else 3000)
 
     def start_fade_out(self):
         self._start_animations(fade_in=False)
@@ -318,6 +321,18 @@ class TooltipEventFilter(QObject):
         self.hover_timer.setSingleShot(True)
         self.hover_timer.timeout.connect(self._on_hover_timer)
 
+    def _has_valid_widget(self) -> bool:
+        return self.widget is not None and not sip.isdeleted(self.widget)
+
+    def _has_valid_tooltip(self) -> bool:
+        return self.tooltip is not None and not sip.isdeleted(self.tooltip)
+
+    def _get_tooltip_if_valid(self):
+        if not self._has_valid_tooltip():
+            self.tooltip = None
+            return None
+        return self.tooltip
+
     def cleanup(self):
         """Clean up resources when the event filter is no longer needed."""
         self.hide_timer.stop()
@@ -328,27 +343,56 @@ class TooltipEventFilter(QObject):
             QGuiApplication.instance().removeEventFilter(self)
             self._app_event_filter_installed = False
 
-        if self.tooltip and self.tooltip.isVisible():
-            self.tooltip.start_fade_out()
+        tooltip = self._get_tooltip_if_valid()
+        if tooltip:
+            try:
+                if tooltip.isVisible():
+                    tooltip.start_fade_out()
+            except RuntimeError:
+                pass
         self.tooltip = None
 
     def _on_hover_timer(self):
-        if self._mouse_inside:
+        if self._mouse_inside and self._has_valid_widget():
             self.show_tooltip()
 
     def show_tooltip(self):
-        if not self.tooltip:
-            self.tooltip = CustomToolTip.get_or_create_tooltip()
-            self.tooltip._position = self.position  # Set position preference
+        if not self._has_valid_widget():
+            self._hide_tooltip()
+            return
+
+        tooltip = self._get_tooltip_if_valid()
+        if not tooltip:
+            tooltip = CustomToolTip.get_or_create_tooltip()
+            tooltip._position = self.position  # Set position preference
+            self.tooltip = tooltip
 
         # Update content if tooltip is visible, otherwise show it
-        if self.tooltip.isVisible():
-            self.tooltip.update_content(self.tooltip_text)
-        else:
+        try:
+            if tooltip.isVisible():
+                tooltip.update_content(self.tooltip_text)
+            else:
+                widget_rect = self.widget.rect()
+                widget_global_pos = self.widget.mapToGlobal(QPoint(0, 0))
+                global_geometry = widget_rect.translated(widget_global_pos)
+
+                geometry = (
+                    global_geometry
+                    if (self.widget.isVisible() and widget_rect.width() > 0 and widget_rect.height() > 0)
+                    else None
+                )
+                tooltip.show_tooltip(self.tooltip_text, geometry)
+        except RuntimeError:
+            # Pooled tooltip can be deleted by Qt between timer ticks; recreate and continue.
+            if not self._has_valid_widget():
+                self._hide_tooltip()
+                return
+
+            self.tooltip = CustomToolTip.get_or_create_tooltip()
+            self.tooltip._position = self.position
             widget_rect = self.widget.rect()
             widget_global_pos = self.widget.mapToGlobal(QPoint(0, 0))
             global_geometry = widget_rect.translated(widget_global_pos)
-
             geometry = (
                 global_geometry
                 if (self.widget.isVisible() and widget_rect.width() > 0 and widget_rect.height() > 0)
@@ -366,22 +410,37 @@ class TooltipEventFilter(QObject):
     def update_tooltip_text(self, new_text):
         """Update tooltip text without hiding the tooltip if it's currently shown."""
         self.tooltip_text = new_text
-        # If tooltip is currently visible, update its content immediately
-        if self.tooltip and self.tooltip.isVisible():
-            self.tooltip.update_content(new_text)
+        tooltip = self._get_tooltip_if_valid()
+        if tooltip:
+            try:
+                if tooltip.isVisible():
+                    tooltip.update_content(new_text)
+            except RuntimeError:
+                self.tooltip = None
 
     def _hide_tooltip(self):
-        if self.tooltip and self.tooltip.isVisible():
-            self.tooltip.start_fade_out()
+        tooltip = self._get_tooltip_if_valid()
+        if tooltip:
+            try:
+                if tooltip.isVisible():
+                    tooltip.start_fade_out()
+                else:
+                    # Tooltip was already hidden (for example by another tooltip show call).
+                    CustomToolTip.return_to_pool(tooltip)
+            except RuntimeError:
+                pass
         if self._app_event_filter_installed:
             QGuiApplication.instance().removeEventFilter(self)
             self._app_event_filter_installed = False
         self._mouse_inside = False
         self.poll_timer.stop()
-        # Clear reference to tooltip so it can be returned to pool
         self.tooltip = None
 
     def _poll_mouse(self):
+        if not self._has_valid_widget():
+            self._hide_tooltip()
+            return
+
         pos = QCursor.pos()
         widget_rect = self.widget.rect()
         widget_global_pos = self.widget.mapToGlobal(QPoint(0, 0))
@@ -412,11 +471,17 @@ class TooltipEventFilter(QObject):
                 self.hover_timer.stop()
                 self.hide_timer.stop()
                 self._hide_tooltip()
-        # Application-wide mouse move
-        if event.type() == QEvent.Type.MouseMove and self.tooltip and self.tooltip.isVisible():
-            self._poll_mouse()
-        return super().eventFilter(obj, event)
 
+        tooltip = self._get_tooltip_if_valid()
+        if event.type() == QEvent.Type.MouseMove and tooltip:
+            try:
+                is_visible = tooltip.isVisible()
+            except RuntimeError:
+                self.tooltip = None
+                is_visible = False
+            if is_visible:
+                self._poll_mouse()
+        return super().eventFilter(obj, event)
 
 def set_tooltip(widget: QWidget, text: str, delay: int = 400, position: str | None = None):
     """Set a tooltip to a widget in a declarative way.
@@ -440,3 +505,4 @@ def set_tooltip(widget: QWidget, text: str, delay: int = 400, position: str | No
         widget.setMouseTracking(True)
         widget.installEventFilter(event_filter)
         widget._tooltip_filter = event_filter
+

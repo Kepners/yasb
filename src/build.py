@@ -57,7 +57,7 @@ msi_data = {
         ("IconId", "assets/images/app_icon.ico"),
     ],
     "Registry": [
-        ("AppUserModelId", -1, f"Software\\Classes\\AppUserModelId\\{APP_ID}", "DisplayName", "YASB", "TARGETDIR"),
+        ("AppUserModelId", -1, f"Software\\Classes\\AppUserModelId\\{APP_ID}", "DisplayName", "LF Status Bar", "TARGETDIR"),
         (
             "AppUserModelIdIcon",
             -1,
@@ -75,14 +75,14 @@ bdist_msi_options = {
     "upgrade_code": "{3f620cf5-07b5-47fd-8e37-9ca8ad14b608}",
     "add_to_path": True,
     "dist_dir": "dist/out",
-    "initial_target_dir": r"[ProgramFiles64Folder]\YASB",
+    "initial_target_dir": r"[ProgramFiles64Folder]\LFStatusBar",
     "all_users": True,
     "skip_build": True,
-    "target_name": f"yasb-{BUILD_VERSION if RELEASE_CHANNEL == 'stable' else 'dev'}-{msi_arch_suffix}.msi",
+    "target_name": f"lfstatusbar-{BUILD_VERSION if RELEASE_CHANNEL == 'stable' else 'dev'}-{msi_arch_suffix}.msi",
     "summary_data": {
         "author": "AmN",
         "comments": "A highly configurable Windows status bar",
-        "keywords": "windows; statusbar; ricing; customization; topbar; taskbar; yasb",
+        "keywords": "windows; statusbar; ricing; customization; topbar; taskbar; layoutforge",
     },
 }
 
@@ -91,31 +91,31 @@ executables = [
         "main.py",
         base="gui",
         icon="assets/images/app_icon.ico",
-        shortcut_name="YASB",
+        shortcut_name="LF Status Bar",
         shortcut_dir="MyProgramMenu",
-        copyright=f"Copyright (C) {datetime.datetime.now().year} AmN",
-        target_name="yasb",
+        copyright=f"Copyright (C) {datetime.datetime.now().year} Kepners",
+        target_name="LFStatusBar",
     ),
     Executable(
         "core/ui/windows/themes.py",
         base="gui",
         icon="assets/images/app_icon.ico",
-        copyright=f"Copyright (C) {datetime.datetime.now().year} AmN",
-        target_name="yasb_themes",
+        copyright=f"Copyright (C) {datetime.datetime.now().year} Kepners",
+        target_name="LFStatusBar_themes",
     ),
     Executable(
         "cli.py",
         base="Console",
-        copyright=f"Copyright (C) {datetime.datetime.now().year} AmN",
-        target_name="yasbc",
+        copyright=f"Copyright (C) {datetime.datetime.now().year} Kepners",
+        target_name="lfstatusc",
     ),
 ]
 
 setup(
-    name="YASB",
+    name="LF Status Bar",
     version=BUILD_VERSION,
-    author="AmN",
-    description="YASB",
+    author="Kepners",
+    description="LayoutForge Status Bar",
     executables=executables,
     options={
         "build_exe": build_options,

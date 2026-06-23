@@ -1,5 +1,5 @@
 """
-YASB CLI
+LF Status Bar CLI
 
 NOTE: Avoid importing heavy libraries directly to avoid slowing down the startup time.
 
@@ -44,11 +44,11 @@ YASB_CLI_VERSION = CLI_VERSION
 YASB_RELEASE_CHANNEL = RELEASE_CHANNEL
 
 INSTALLATION_PATH = os.path.abspath(os.path.join(__file__, "../../.."))
-EXE_PATH = os.path.join(INSTALLATION_PATH, "yasb.exe")
+EXE_PATH = os.path.join(INSTALLATION_PATH, "LFStatusBar.exe")
 AUTOSTART_FILE = EXE_PATH if os.path.exists(EXE_PATH) else None
 
-CLI_SERVER_PIPE_NAME = r"\\.\pipe\yasb_pipe_cli"
-LOG_SERVER_PIPE_NAME = r"\\.\pipe\yasb_pipe_log"
+CLI_SERVER_PIPE_NAME = r"\\.\pipe\lfstatusbar_pipe_cli"
+LOG_SERVER_PIPE_NAME = r"\\.\pipe\lfstatusbar_pipe_log"
 
 
 def write_message(handle: int, msg_dict: dict[str, str]):
@@ -118,7 +118,7 @@ class CLIHandler:
 
     def send_command_to_application(self, command: str):
         """
-        Send a command to the running YASB application through the pipe.
+        Send a command to the running LF Status Bar application through the pipe.
 
         Commands can be:
         - "stop" - Stop the application
@@ -141,7 +141,7 @@ class CLIHandler:
                 None,
             )
             if pipe_handle == INVALID_HANDLE_VALUE:
-                print("Failed to connect to YASB. Pipe not found. It may not be running.")
+                print("Failed to connect to LF Status Bar. Pipe not found. It may not be running.")
                 return
 
             # Send the command as bytes
@@ -206,9 +206,9 @@ class CLIHandler:
 
     def parse_arguments(self):
         parser = CustomArgumentParser(
-            description="The command-line interface for YASB Reborn.",
+            description="The command-line interface for LF Status Bar.",
             add_help=False,
-            prog="yasbc",
+            prog="lfstatusc",
         )
         subparsers = parser.add_subparsers(
             dest="command",
@@ -218,7 +218,7 @@ class CLIHandler:
         start_parser = subparsers.add_parser(
             "start",
             help="Start the application",
-            prog="yasbc start",
+            prog="lfstatusc start",
         )
         start_parser.add_argument(
             "-s",
@@ -230,7 +230,7 @@ class CLIHandler:
         stop_parser = subparsers.add_parser(
             "stop",
             help="Stop the application",
-            prog="yasbc stop",
+            prog="lfstatusc stop",
         )
         stop_parser.add_argument(
             "-s",
@@ -248,7 +248,7 @@ class CLIHandler:
         reload_parser = subparsers.add_parser(
             "reload",
             help="Reload the application",
-            prog="yasbc reload",
+            prog="lfstatusc reload",
         )
         reload_parser.add_argument(
             "-s",
@@ -266,7 +266,7 @@ class CLIHandler:
         enable_autostart_parser = subparsers.add_parser(
             "enable-autostart",
             help="Enable autostart on system boot",
-            prog="yasbc enable-autostart",
+            prog="lfstatusc enable-autostart",
         )
         enable_autostart_parser.add_argument(
             "--task",
@@ -277,7 +277,7 @@ class CLIHandler:
         disable_autostart_parser = subparsers.add_parser(
             "disable-autostart",
             help="Disable autostart on system boot",
-            prog="yasbc disable-autostart",
+            prog="lfstatusc disable-autostart",
         )
         disable_autostart_parser.add_argument(
             "--task",
@@ -294,7 +294,7 @@ class CLIHandler:
         show_bar_parser = subparsers.add_parser(
             "show-bar",
             help="Show the bar on a specific screen",
-            prog="yasbc show-bar",
+            prog="lfstatusc show-bar",
         )
         show_bar_parser.add_argument(
             "-s",
@@ -306,7 +306,7 @@ class CLIHandler:
         hide_bar_parser = subparsers.add_parser(
             "hide-bar",
             help="Hide the bar on a specific screen",
-            prog="yasbc hide-bar",
+            prog="lfstatusc hide-bar",
         )
         hide_bar_parser.add_argument(
             "-s",
@@ -318,7 +318,7 @@ class CLIHandler:
         toggle_bar_parser = subparsers.add_parser(
             "toggle-bar",
             help="Toggle the bar on a specific screen",
-            prog="yasbc toggle-bar",
+            prog="lfstatusctoggle-bar",
         )
         toggle_bar_parser.add_argument(
             "-s",
@@ -331,7 +331,7 @@ class CLIHandler:
         set_channel_parser = subparsers.add_parser(
             "set-channel",
             help="Switch release channels",
-            prog="yasbc set-channel",
+            prog="lfstatusc set-channel",
         )
         set_channel_parser.add_argument(
             "target_channel",
@@ -353,7 +353,7 @@ class CLIHandler:
         )
         subparsers.add_parser(
             "log",
-            help="Tail yasb process logs (cancel with Ctrl-C)",
+            help="Tail LF Status Bar logs (cancel with Ctrl-C)",
             add_help=False,
         )
         parser.add_argument(
@@ -374,27 +374,19 @@ class CLIHandler:
             if not args.silent:
                 print(
                     textwrap.dedent(f"""\
-                    Start YASB Reborn v{YASB_VERSION} in background.
+                    Start LF Status Bar v{YASB_VERSION} in background.
 
-                    # Community
-                    * Join the Discord https://discord.gg/qkeunvBFgX - Chat, ask questions, share your desktops and more...
-                    * GitHub discussions https://github.com/amnweb/yasb/discussions - Ask questions, share your ideas and more...
-
-                    # Documentation
-                    * Read the docs https://github.com/amnweb/yasb/wiki - how to configure and use YASB
-                    * Read the FAQ https://github.com/amnweb/yasb/wiki/FAQ
-                    
-                    # Support the project
-                    * Consider sponsoring the project on GitHub Sponsors or Buy Me a Coffee
-                    * Thank you for using YASB!
+                    # Based on YASB by AmN
+                    * Original: https://github.com/amnweb/yasb
+                    * Fork: https://github.com/Kepners/yasb
                 """)
                 )
-            subprocess.Popen(["yasb.exe"])
+            subprocess.Popen(["LFStatusBar.exe"])
             sys.exit(0)
 
         elif args.command == "stop":
             if args.force:
-                for proc in ["yasb.exe", "yasb_themes.exe"]:
+                for proc in ["LFStatusBar.exe", "LFStatusBar_themes.exe"]:
                     if is_process_running(proc):
                         subprocess.run(["taskkill", "/f", "/im", proc], creationflags=subprocess.CREATE_NO_WINDOW)
             else:
@@ -402,12 +394,12 @@ class CLIHandler:
             sys.exit(0)
 
         elif args.command == "reload":
-            if is_process_running("yasb.exe"):
+            if is_process_running("LFStatusBar.exe"):
                 if not args.silent:
-                    print("Reload YASB...")
+                    print("Reload LF Status Bar...")
                 self.send_command_to_application("reload")
             else:
-                print("YASB is not running. Reload aborted.")
+                print("LF Status Bar is not running. Reload aborted.")
             sys.exit(0)
 
         elif args.command == "show-bar":
@@ -455,7 +447,7 @@ class CLIHandler:
             sys.exit(0)
 
         elif args.command == "log":
-            print("Starting YASB log client. Press Ctrl+C to exit.")
+            print("Starting LF Status Bar log client. Press Ctrl+C to exit.")
             try:
                 while True:
                     # Wait for the log pipe to be created
@@ -488,7 +480,7 @@ class CLIHandler:
                             elif msg.get("type") == "DATA":
                                 print(msg.get("data"))
             except KeyboardInterrupt:
-                print("\nExiting YASB log client.")
+                print("\nExiting LF Status Bar log client.")
 
         elif args.command == "monitor-information":
             try:
@@ -521,7 +513,7 @@ class CLIHandler:
         elif args.command == "reset":
             confirm = (
                 input(
-                    "YASB will be stopped if it is running.\n"
+                    "LF Status Bar will be stopped if it is running.\n"
                     "Do you want to continue and restore default config files and clear the cache? (Y/n): "
                 )
                 .strip()
@@ -536,14 +528,14 @@ class CLIHandler:
             from pathlib import Path
 
             # Determine config path
-            config_home = os.environ.get("YASB_CONFIG_HOME")
+            config_home = os.environ.get("YASB_CONFIG_HOME") or os.environ.get("LFBAR_CONFIG_HOME")
             if config_home:
                 config_path = Path(config_home)
             else:
                 config_path = Path.home() / ".config" / "yasb"
 
             # Stop YASB if it is running
-            for proc in ["yasb.exe", "yasb_themes.exe"]:
+            for proc in ["LFStatusBar.exe", "LFStatusBar_themes.exe"]:
                 if is_process_running(proc):
                     subprocess.run(["taskkill", "/f", "/im", proc], creationflags=subprocess.CREATE_NO_WINDOW)
 
@@ -579,9 +571,9 @@ class CLIHandler:
         elif args.command == "help" or args.help:
             print(
                 textwrap.dedent(f"""\
-                The command-line interface for YASB Reborn.
+                The command-line interface for LF Status Bar.
 
-                {Format.underline}Usage{Format.reset}: yasbc <COMMAND>
+                {Format.underline}Usage{Format.reset}: lfstatusc <COMMAND>
 
                 {Format.underline}Commands{Format.reset}:
                   start                     Start the application
@@ -595,7 +587,7 @@ class CLIHandler:
                   toggle-bar                Toggle the bar on all or a specific screen
                   set-channel               Switch release channels (stable, dev)
                   update                    Update the application
-                  log                       Tail yasb process logs (cancel with Ctrl-C)
+                  log                       Tail LF Status Bar logs (cancel with Ctrl-C)
                   reset                     Restore default config files and clear cache
                   help                      Print this message
 
@@ -612,7 +604,7 @@ class CLIHandler:
             architecture = get_architecture()
             arch_suffix = f" {architecture}" if architecture else ""
             version_message = (
-                f"YASB Reborn v{YASB_VERSION}{arch_suffix} ({YASB_RELEASE_CHANNEL})\nYASB-CLI v{YASB_CLI_VERSION}"
+                f"LF Status Bar v{YASB_VERSION}{arch_suffix} ({YASB_RELEASE_CHANNEL})\nlfstatusc v{YASB_CLI_VERSION}"
             )
             print(version_message)
         else:
@@ -644,8 +636,8 @@ class CLITaskHandler:
         scheduler.Connect()
         root_folder = scheduler.GetFolder("\\")
         task_def = scheduler.NewTask(0)
-        task_def.RegistrationInfo.Description = "A highly configurable Windows status bar."
-        task_def.RegistrationInfo.Author = "AmN"
+        task_def.RegistrationInfo.Description = "LayoutForge Status Bar"
+        task_def.RegistrationInfo.Author = "Kepners"
         task_def.Settings.Compatibility = 6
         trigger = task_def.Triggers.Create(9)
         trigger.Enabled = True
@@ -675,7 +667,7 @@ class CLITaskHandler:
         action.Path = EXE_PATH
         action.WorkingDirectory = INSTALLATION_PATH
         try:
-            root_folder.RegisterTaskDefinition("YASB Reborn", task_def, 6, None, None, 3, None)
+            root_folder.RegisterTaskDefinition("LF Status Bar", task_def, 6, None, None, 3, None)
             print("Task YASB Reborn created successfully.")
         except Exception as e:
             print(f"Failed to create task YASB Reborn. Error: {e}")
@@ -687,7 +679,7 @@ class CLITaskHandler:
         scheduler.Connect()
         root_folder = scheduler.GetFolder("\\")
         try:
-            root_folder.DeleteTask("YASB Reborn", 0)
+            root_folder.DeleteTask("LF Status Bar", 0)
             print("Task YASB Reborn deleted successfully.")
         except Exception:
             print("Failed to delete task YASB or task does not exist.")
@@ -729,7 +721,7 @@ class CLIChannelHandler:
         print("Things to consider:")
         print("  * Configuration files may be incompatible between versions")
         print("  * You may need to reconfigure some settings after switching")
-        print("  * Switching channels will download and install a new version of YASB")
+        print("  * Switching channels will download and install a new version")
 
         if target_channel == "dev":
             print("  * Bugs and instability may be present in dev channel")
@@ -770,7 +762,7 @@ class CLIChannelHandler:
             update_handler.download_yasb(release_info.download_url, msi_path)
 
             # Kill running processes
-            for proc in ["yasb.exe", "yasb_themes.exe"]:
+            for proc in ["LFStatusBar.exe", "LFStatusBar_themes.exe"]:
                 if is_process_running(proc):
                     subprocess.run(["taskkill", "/f", "/im", proc], creationflags=subprocess.CREATE_NO_WINDOW)
 
@@ -834,11 +826,11 @@ class CLIUpdateHandler:
             release_info = update_service.check_for_updates(timeout=15)
 
             if release_info is None:
-                print(f"YASB Reborn is already up to date (v{yasb_version}).\n")
+                print(f"LF Status Bar is already up to date (v{yasb_version}).\n")
                 sys.exit(0)
 
             # Update available
-            print(f"Found {Format.cyan}YASB Reborn{Format.reset} Version {release_info.version}")
+            print(f"Found {Format.cyan}LF Status Bar{Format.reset} Version {release_info.version}")
             print("Changelog https://github.com/amnweb/yasb/releases/latest")
             # Ask the user if they want to continue with the update
             try:
@@ -856,7 +848,7 @@ class CLIUpdateHandler:
             self.download_yasb(release_info.download_url, msi_path)
 
             # Kill running processes
-            for proc in ["yasb.exe", "yasb_themes.exe"]:
+            for proc in ["LFStatusBar.exe", "LFStatusBar_themes.exe"]:
                 if is_process_running(proc):
                     subprocess.run(["taskkill", "/f", "/im", proc], creationflags=subprocess.CREATE_NO_WINDOW)
 

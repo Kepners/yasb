@@ -1,5 +1,5 @@
 """
-Centralized update service for checking, downloading, and managing YASB updates.
+Centralized update service for checking, downloading, and managing LF Status Bar updates.
 
 This module provides a unified interface for handling application updates across
 both the automatic background update checker and the GUI update dialog. It supports
@@ -28,7 +28,7 @@ from settings import APP_ID, BUILD_VERSION, RELEASE_CHANNEL, SCRIPT_PATH
 GITHUB_API_URL = "https://api.github.com/repos/amnweb/yasb/releases/latest"
 GITHUB_API_DEV_URL = "https://api.github.com/repos/amnweb/yasb/releases/tags/dev"
 GITHUB_FALLBACK_URL = "https://api.yasb.dev/github-meta.json"
-USER_AGENT_HEADER = {"User-Agent": "YASB Updater"}
+USER_AGENT_HEADER = {"User-Agent": "LF Status Bar Updater"}
 CHECK_INTERVAL = 60 * 60  # 60 minutes
 LAST_CHECK_FILE = app_data_path("last_update_check")
 ARCHITECTURE = get_architecture()
@@ -405,10 +405,10 @@ def start_update_checker() -> None:
 
                 # Determine launch URL and message based on channel
                 if update_service._current_channel == "dev":
-                    launch_url = "https://github.com/amnweb/yasb/releases/tag/dev"
+                    launch_url = "https://github.com/Kepners/yasb/releases/tag/dev"
                     message = "New dev build is available!"
                 else:
-                    launch_url = "https://github.com/amnweb/yasb/releases/latest"
+                    launch_url = "https://github.com/Kepners/yasb/releases/latest"
                     message = f"New version {release_info.version} is available!"
 
                 toaster.show(

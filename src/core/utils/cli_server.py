@@ -25,8 +25,8 @@ from core.utils.win32.bindings import (
 from core.utils.win32.constants import INVALID_HANDLE_VALUE
 from settings import CLI_VERSION
 
-CLI_SERVER_PIPE_NAME = r"\\.\pipe\yasb_pipe_cli"
-LOG_SERVER_PIPE_NAME = r"\\.\pipe\yasb_pipe_log"
+CLI_SERVER_PIPE_NAME = r"\\.\pipe\lfstatusbar_pipe_cli"
+LOG_SERVER_PIPE_NAME = r"\\.\pipe\lfstatusbar_pipe_log"
 BUFSIZE = 65536
 
 logger = logging.getLogger("cli_server")

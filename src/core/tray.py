@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 from core.bar_manager import BarManager
 from core.config import get_config
 from core.ui.windows.about import AboutDialog
-from core.utils.controller import exit_application, reload_application
+from core.utils.controller import exit_application, reload_application, restart_layoutforge_shell
 from core.utils.win32.utilities import apply_qmenu_style, disable_autostart, enable_autostart, is_autostart_enabled
 from settings import (
     APP_NAME,
@@ -22,10 +22,10 @@ from settings import (
     SCRIPT_PATH,
 )
 
-VBS_PATH = os.path.join(SCRIPT_PATH, "yasb.vbs")
-EXE_PATH = os.path.join(SCRIPT_PATH, "yasb.exe")
-THEME_EXE_PATH = os.path.join(SCRIPT_PATH, "yasb_themes.exe")
-SHORTCUT_FILENAME = "yasb.lnk"
+VBS_PATH = os.path.join(SCRIPT_PATH, "LFStatusBar.vbs")
+EXE_PATH = os.path.join(SCRIPT_PATH, "LFStatusBar.exe")
+THEME_EXE_PATH = os.path.join(SCRIPT_PATH, "LFStatusBar_themes.exe")
+SHORTCUT_FILENAME = "LFStatusBar.lnk"
 AUTOSTART_FILE = EXE_PATH if os.path.exists(EXE_PATH) else VBS_PATH
 
 
@@ -136,9 +136,13 @@ class SystemTrayManager(QSystemTrayIcon):
             yasb_themes_action = self.menu.addAction("Get Themes")
             yasb_themes_action.triggered.connect(lambda: os.startfile(THEME_EXE_PATH))
 
-        reload_action = self.menu.addAction("Reload YASB")
+        reload_action = self.menu.addAction("Reload LF Status Bar")
         reload_action.triggered.connect(self._reload_application)
         self.reload_action = reload_action
+
+        restart_layoutforge_action = self.menu.addAction("Restart LayoutForge")
+        restart_layoutforge_action.triggered.connect(self._restart_layoutforge_shell)
+        self.restart_layoutforge_action = restart_layoutforge_action
 
         self.menu.addSeparator()
         if self.is_wm_installed("komorebi"):
@@ -243,6 +247,9 @@ class SystemTrayManager(QSystemTrayIcon):
 
     def _reload_application(self):
         reload_application("Reloading Application from tray...")
+
+    def _restart_layoutforge_shell(self):
+        restart_layoutforge_shell("Restarting LayoutForge from tray...")
 
     def _exit_application(self):
         exit_application("Exiting Application from tray...")

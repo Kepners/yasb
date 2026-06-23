@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
 )
 from win32con import SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE
 
-from core.utils.controller import exit_application, reload_application
+from core.utils.controller import exit_application, reload_application, restart_layoutforge_shell
 from core.utils.utilities import refresh_widget_style
 from core.utils.win32.app_bar import APPBAR_CALLBACK_MESSAGE, AppBarNotify
 from core.utils.win32.structs import MSG
@@ -513,8 +513,13 @@ class BarContextMenu:
             disable_autohide = self._menu.addAction("Disable Auto Hide")
             disable_autohide.triggered.connect(self._disable_autohide)
 
-        reload_action = self._menu.addAction("Reload Bar")
-        reload_action.triggered.connect(partial(reload_application, "Reloading Bar from context menu..."))
+        reload_action = self._menu.addAction("Reload LF Status Bar")
+        reload_action.triggered.connect(partial(reload_application, "Reloading LF Status Bar from context menu..."))
+
+        restart_shell_action = self._menu.addAction("Restart LayoutForge")
+        restart_shell_action.triggered.connect(
+            partial(restart_layoutforge_shell, "Restarting LayoutForge from bar context menu...")
+        )
 
         exit_action = self._menu.addAction("Exit")
         exit_action.triggered.connect(partial(exit_application, "Exiting Application from context menu..."))

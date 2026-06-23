@@ -9,7 +9,7 @@ bars:
   primary-bar:
     enabled: true
     screens: ["*"]
-    class_name: "yasb-bar"
+    class_name: "lf-bar"
     alignment:
       position: "top"
       center: false
@@ -207,7 +207,7 @@ widgets:
         right: 4
       label: "{data}"
       app_list:
-        - { icon: "\ue62a", launch: "%USERPROFILE%\\.config\\layoutforge\\show-quicklinks.bat", name: "Power" }
+        - { icon: "\ue62a", launch: "%USERPROFILE%\\.config\\layoutforge\\show-quicklinks.bat", name: "Windows" }
   quick_actions:
     type: "yasb.applications.ApplicationsWidget"
     options:

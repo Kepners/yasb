@@ -128,10 +128,22 @@ class SystrayMonitor(QObject):
         self.tray_monitor_window = NativeWindowEx(self._window_proc, "Shell_TrayWnd")
         self.hwnd = self.tray_monitor_window.hwnd
 
+        # CRITICAL: Find explorer's Shell_TrayWnd and demote it from TOPMOST.
+        # When both Shell_TrayWnd windows are TOPMOST, FindWindow returns explorer's
+        # first (created earlier at boot), so all Shell_NotifyIcon calls go to explorer
+        # instead of us. By demoting explorer's to non-topmost, our TOPMOST window
+        # is found first and we receive tray icon registrations.
+        HWND_NOTOPMOST = -2
+        self.real_tray_hwnd = self.find_real_tray_hwnd(self.hwnd)
+        if self.real_tray_hwnd:
+            SetWindowPos(self.real_tray_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+            logger.debug(f"Demoted explorer Shell_TrayWnd (hwnd={self.real_tray_hwnd}) from TOPMOST")
+
         # Set the window as the foreground window
         SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
 
         # Set a timer to keep the window as a foreground window to keep receiving messages
+        self._timer_tick_count = 0
         SetTimer(self.hwnd, 1, 100, None)
 
         self.tray_monitor_window.start_message_loop()
@@ -182,6 +194,11 @@ class SystrayMonitor(QObject):
         elif uMsg == WM_TIMER:
             # We need to set our window topmost to have the priority over the native system tray
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+            # Re-demote explorer's Shell_TrayWnd every ~5 seconds (50 ticks * 100ms)
+            # Explorer may re-assert TOPMOST via its own timers
+            self._timer_tick_count += 1
+            if self._timer_tick_count % 50 == 0 and self.real_tray_hwnd and IsWindow(self.real_tray_hwnd):
+                SetWindowPos(self.real_tray_hwnd, -2, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
             return 0
         elif uMsg == WM_COPYDATA:
             return self.handle_copy_data(hwnd, uMsg, wParam, lParam)

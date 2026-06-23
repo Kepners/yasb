@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 
 def get_env_path():
-    config_home = os.environ.get("YASB_CONFIG_HOME")
+    config_home = os.environ.get("YASB_CONFIG_HOME") or os.environ.get("LFBAR_CONFIG_HOME")
     if config_home:
         return os.path.join(config_home, ".env")
     return os.path.join(os.path.expanduser("~"), ".config", "yasb", ".env")

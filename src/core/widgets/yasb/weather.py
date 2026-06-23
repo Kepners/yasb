@@ -430,11 +430,11 @@ class WeatherWidget(BaseWidget):
             rain = self._weather_data["{hourly_chance_of_rain}"]
             snow = self._weather_data["{hourly_chance_of_snow}"]
 
-            if rain != "N/A" and snow != "N/A" and (int(rain.rstrip("%")) > 0 or int(snow.rstrip("%")) > 0):
+            if rain != "N/A" and snow != "N/A" and (int(float(rain.rstrip("%"))) > 0 or int(float(snow.rstrip("%"))) > 0):
                 precip: list[str] = []
-                if int(rain.rstrip("%")) > 0:
+                if int(float(rain.rstrip("%"))) > 0:
                     precip.append(f"Rain {rain}")
-                if int(snow.rstrip("%")) > 0:
+                if int(float(snow.rstrip("%"))) > 0:
                     precip.append(f"Snow {snow}")
                 tooltip += f"<br><br>Precipitation<br>{' / '.join(precip)}"
 
@@ -487,6 +487,19 @@ class WeatherWidget(BaseWidget):
         value = round(temp) if self.config.hide_decimal else temp
         return f"{value}{unit}"
 
+    def _get_country_flag(self) -> str:
+        """Read country code from LayoutForge's cache file and convert to flag emoji.
+        Re-read on every weather update so VPN changes are reflected within one update cycle."""
+        try:
+            flag_file = os.path.join(os.path.expanduser("~"), ".config", "layoutforge", "weather_country_code.txt")
+            if os.path.exists(flag_file):
+                code = open(flag_file).read().strip()[:2].upper()
+                if len(code) == 2 and code.isalpha():
+                    return "".join(chr(ord(c) + 127397) for c in code)
+        except Exception:
+            pass
+        return ""
+
     def _format_measurement(self, imperial_val: str, imperial_unit: str, metric_val: str, metric_unit: str) -> str:
         if self.config.units == "imperial":
             return f"{imperial_val} {imperial_unit}"
@@ -538,6 +551,7 @@ class WeatherWidget(BaseWidget):
                 "{hourly_chance_of_rain}": f"{self._hourly_data_today[self._current_time.hour].get('chance_of_rain', 0) if self._hourly_data_today and self._current_time else 0}%",
                 "{hourly_chance_of_snow}": f"{self._hourly_data_today[self._current_time.hour].get('chance_of_snow', 0) if self._hourly_data_today and self._current_time else 0}%",
                 # Location and conditions
+                "{flag}": self._get_country_flag(),
                 "{location}": weather_data["location"]["name"],
                 "{location_region}": weather_data["location"]["region"],
                 "{location_country}": weather_data["location"]["country"],

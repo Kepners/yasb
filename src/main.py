@@ -10,7 +10,7 @@ from types import TracebackType
 import qasync
 
 import settings
-from core.application import YASBApplication
+from core.application import LFBarApplication
 from core.bar_manager import BarManager
 from core.config import get_config_and_stylesheet
 from core.event_service import EventService
@@ -23,7 +23,7 @@ from env_loader import load_env, set_font_engine
 
 
 @contextlib.contextmanager
-def single_instance_lock(name: str = "yasb_reborn"):
+def single_instance_lock(name: str = "lf_status_bar"):
     """Create a Windows mutex to ensure a single instance, with optional restart wait.
 
     If the process is launched with --restart-wait, the new instance will
@@ -43,7 +43,7 @@ def single_instance_lock(name: str = "yasb_reborn"):
     if last_err == ERROR_ALREADY_EXISTS:
         # Another instance owns or created the mutex. If we're in restart mode, wait for it.
         if wait_for_restart:
-            logging.info("Waiting for previous YASB instance to exit...")
+            logging.info("Waiting for previous LF Status Bar instance to exit...")
             # Release our initial ownership before waiting to avoid interfering
             ctypes.windll.kernel32.ReleaseMutex(mutex)
 
@@ -72,7 +72,7 @@ def single_instance_lock(name: str = "yasb_reborn"):
             logging.info("Previous instance exited, continuing startup.")
         else:
             ctypes.windll.kernel32.CloseHandle(mutex)
-            logging.error("Another instance of the YASB is already running.")
+            logging.error("Another instance of LF Status Bar is already running.")
             sys.exit(1)
 
     try:
@@ -88,11 +88,11 @@ def single_instance_lock(name: str = "yasb_reborn"):
 
 def main():
     """Main entry point"""
-    app = YASBApplication(argv)
+    app = LFBarApplication(argv)
     asyncio.run(main_async(app), loop_factory=qasync.QEventLoop)
 
 
-async def main_async(app: YASBApplication):
+async def main_async(app: LFBarApplication):
     """
     Async entry point
     Required for qasync to work properly

@@ -3,7 +3,7 @@ from asyncio import AbstractEventLoop, Event
 from PyQt6.QtWidgets import QApplication
 
 
-class YASBApplication(QApplication):
+class LFBarApplication(QApplication):
     """
     Subclass of QApplication to provide type-safe access to application-wide
     asyncio loop and shutdown events.
